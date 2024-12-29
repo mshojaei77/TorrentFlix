@@ -128,7 +128,7 @@ QPushButton {
     color: #E0E0E0;
     padding: 10px 20px;
     border: 2px solid #9C27B0; /* Purple accent */
-    border-radius: 15px;
+    border-radius: 20px;
     font-weight: bold;
     font-size: 16px; /* Increased font size */
 }
@@ -154,34 +154,39 @@ QScrollArea#resultsScrollArea, QWidget#resultsArea {
 }
 
 /* All scroll bars */
-QScrollBar:vertical {
+QScrollBar:vertical, QScrollBar:horizontal {
     border: none;
     background: rgba(156, 39, 176, 0.1); /* Very subtle purple tint */
     width: 14px; /* Slightly wider */
+    height: 14px; /* Slightly wider for horizontal */
     border-radius: 7px;
     margin: 2px;
 }
 
-QScrollBar::handle:vertical {
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                                stop:0 #9C27B0, stop:1 #AB47BC); /* Gradient purple */
     border-radius: 7px;
-    min-height: 40px; /* Taller minimum height */
+    min-height: 40px; /* Taller minimum height for vertical */
+    min-width: 40px; /* Wider minimum width for horizontal */
     border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
 }
 
-QScrollBar::handle:vertical:hover {
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                                stop:0 #D500F9, stop:1 #E040FB); /* Brighter gradient on hover */
     border: 1px solid rgba(255, 255, 255, 0.2); /* More visible border on hover */
 }
 
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     height: 0;
+    width: 0; /* No width for horizontal */
     background: none;
 }
 
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                                stop:0 rgba(255, 255, 255, 0.03),
                                stop:0.5 rgba(255, 255, 255, 0.07),
@@ -199,8 +204,8 @@ QTabBar::tab {
     background-color: transparent;
     padding: 8px 15px;
     border: none;
-    border-top-left-radius: 15px;
-    border-top-right-radius: 15px;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
     font-size: 16px; /* Increased font size */
 }
 
@@ -243,7 +248,7 @@ QListWidget {
 
 QListWidget::item {
     padding: 5px;
-    border-radius: 15px;
+    border-radius: 20px;
     background-color: transparent;
 }
 
@@ -265,14 +270,12 @@ QLabel#posterLabel {
 
 QGroupBox#InfoGroupBox {
     border: none;
-    border-radius: 20px;
     padding: 8px;
     background-color: transparent;
 }
 
 QLineEdit#searchInput {
     border: 2px solid #9C27B0; /* Purple accent */
-    border-radius: 15px;
     padding: 8px;
     background-color: transparent;
     font-size: 18px; /* Increased font size */

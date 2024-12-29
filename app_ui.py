@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'e:\player\app.ui'
+# Form implementation generated from reading ui file 'e:\TorrentFlix\app.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.11
 #
@@ -27,9 +27,16 @@ class Ui_MainWindow(object):
         self.searchLayout = QtWidgets.QHBoxLayout()
         self.searchLayout.setSpacing(10)
         self.searchLayout.setObjectName("searchLayout")
+        self.categoryComboBox = QtWidgets.QComboBox(self.centralWidget)
+        self.categoryComboBox.setObjectName("categoryComboBox")
+        self.searchLayout.addWidget(self.categoryComboBox)
         self.searchInput = QtWidgets.QLineEdit(self.centralWidget)
         self.searchInput.setObjectName("searchInput")
         self.searchLayout.addWidget(self.searchInput)
+        self.sourceComboBox = QtWidgets.QComboBox(self.centralWidget)
+        self.sourceComboBox.setMinimumSize(QtCore.QSize(200, 0))
+        self.sourceComboBox.setObjectName("sourceComboBox")
+        self.searchLayout.addWidget(self.sourceComboBox)
         self.searchButton = QtWidgets.QPushButton(self.centralWidget)
         self.searchButton.setObjectName("searchButton")
         self.searchLayout.addWidget(self.searchButton)
@@ -205,13 +212,13 @@ class Ui_MainWindow(object):
         MainWindow.setMenuBar(self.menuBar)
 
         self.retranslateUi(MainWindow)
-        self.detailsTabWidget.setCurrentIndex(2)
+        self.detailsTabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "TorrentFlix - Where Pixels Meet Paradise"))
-        self.searchInput.setPlaceholderText(_translate("MainWindow", "Enter movie title..."))
+        self.searchInput.setPlaceholderText(_translate("MainWindow", "Enter movie/series title..."))
         self.searchButton.setText(_translate("MainWindow", "Search"))
         self.detailsTabWidget.setTabText(self.detailsTabWidget.indexOf(self.tab), _translate("MainWindow", "Plot"))
         self.detailsTabWidget.setTabText(self.detailsTabWidget.indexOf(self.detailsTab), _translate("MainWindow", "Details"))

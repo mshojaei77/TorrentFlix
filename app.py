@@ -12,10 +12,10 @@ import tempfile
 import requests
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout,
                              QWidget, QDialog, QListWidget, QAbstractItemView, QListWidgetItem, QScrollArea,
-                             QSizePolicy, QComboBox)
+                             QSizePolicy, QFrame)
 from PyQt5.QtCore import Qt, QFile, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QBrush, QPalette, QColor
-from PyQt5.QtCore import QSize
+from PyQt5.QtCore import QSize, QSettings
 from app_ui import Ui_MainWindow
 from torrent_search import TorrentSearcher, TorrentSource, Movie, MovieSearchError, Torrent, ConnectionBlockedError, MovieMetadata
 from movie_info_mata import get_metacritic_info
@@ -99,31 +99,32 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
         self._load_stylesheet()
         self.resultsLayout.setAlignment(Qt.AlignTop)
         
-        # Add source selection combo box with categories
-        self.sourceComboBox = QComboBox()
-        self.sourceComboBox.setFixedWidth(200)
-        categories = TorrentSource.get_sources_by_category()
+        # Get categories and sources
+        raw_categories = TorrentSource.get_sources_by_category()
         
-        for category, sources in categories.items():
-            # Skip adding header for General category
-            if category != "General":
-                # Add category header
-                self.sourceComboBox.addItem(f"⚊⚊ {category} ⚊⚊")
-                index = self.sourceComboBox.count() - 1
-                self.sourceComboBox.model().item(index).setEnabled(False)
+        # Process categories - distribute 'All' sources across other categories
+        categories = {}
+        all_sources = []
+        
+        # First get the 'All' sources if they exist
+        if 'All' in raw_categories:
+            all_sources = raw_categories['All']
+            del raw_categories['All']
             
-            # Add sources under this category
-            for source in sources:
-                # Add source name instead of full config dict
-                self.sourceComboBox.addItem(source.config["name"], source)
+        # Add 'All' sources to each remaining category
+        for category, sources in raw_categories.items():
+            categories[category] = sources + all_sources
+            
+        # Setup category combo box
+        self.categoryComboBox.addItems(list(categories.keys()))
+        self.categoryComboBox.currentTextChanged.connect(self._update_sources)
         
-        # Set default source
-        default_index = self.sourceComboBox.findText("YTS.mx")
-        if default_index >= 0:
-            self.sourceComboBox.setCurrentIndex(default_index)
+        # Store categories and sources for later use
+        self.categories = categories
         
-        # Add combo box to layout
-        self.searchLayout.insertWidget(1, self.sourceComboBox)
+        # Initial population of sources with first category
+        first_category = list(categories.keys())[0]
+        self._update_sources(first_category)
 
     def _load_stylesheet(self):
         style_file = QFile("style.qss")
@@ -152,6 +153,17 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
                 self.current_history_index -= 1
                 
             self.searchInput.setText(self.history[self.current_history_index])
+        elif event.key() == Qt.Key_Down:
+            # Move to next item in history, wrapping around to start if at end
+            if not self.history:
+                return
+                
+            if self.current_history_index >= len(self.history) - 1:
+                self.current_history_index = 0
+            else:
+                self.current_history_index += 1
+                
+            self.searchInput.setText(self.history[self.current_history_index])
         else:
             # Call the original QLineEdit keyPressEvent for other keys
             QLineEdit.keyPressEvent(self.searchInput, event)
@@ -174,6 +186,15 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
             self._show_error("Please enter a movie title")
             return
 
+        # Clear previous results first
+        self._clear_results()
+        
+        # Reset background and poster
+        palette = self.palette()
+        palette.setBrush(QPalette.Window, QBrush(QColor("#1a1a1a")))  # Reset to default dark background
+        self.setPalette(palette)
+        self.posterLabel.clear()  # Clear the poster image
+
         # Add to history only if it's a new search
         if not self.history or query != self.history[-1]:
             self.history.append(query)
@@ -181,14 +202,15 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
         
         self.current_history_index = -1  # Reset history index
         try:
-            self._clear_results()
             selected_text = self.sourceComboBox.currentText()
             if selected_text.startswith("==="):
                 self._show_error("Please select a specific source, not a category header")
                 return
             
             selected_source = TorrentSource.from_display_name(selected_text)
-            movies = self.torrent_searcher.search_movies(query, selected_source)
+            
+            # Increase the limit to get more results
+            movies = self.torrent_searcher.search_movies(query, selected_source, limit=50)  # Increase from default
             
             if not movies:
                 self._show_no_results()
@@ -478,15 +500,6 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
         # Handle Metacritic metadata if available
         if movie.metadata and 'metacritic' in movie.metadata:
             meta_data = movie.metadata['metacritic']['info']
-            
-            # Create scroll widget if needed
-            if not self.detailsScrollArea.widget():
-                scroll_widget = QWidget()
-                scroll_layout = QVBoxLayout(scroll_widget)
-                self.detailsScrollArea.setWidget(scroll_widget)
-            else:
-                scroll_widget = self.detailsScrollArea.widget()
-                scroll_layout = scroll_widget.layout()
 
             # Display Metascore if available
             if 'metascore' in meta_data:
@@ -495,31 +508,11 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
                 score = metascore['score']
                 sentiment = metascore['sentiment']
                 
-                # More granular color scale based on score
                 score_num = int(score)
-                if score_num >= 90:
-                    color = '#00FF00'  # Bright green for exceptional
-                elif score_num >= 75:
-                    color = '#66CC33'  # Green for positive
-                elif score_num >= 60:
-                    color = '#FFCC33'  # Yellow for mixed-positive
-                elif score_num >= 40:
-                    color = '#FF9933'  # Orange for mixed-negative
-                elif score_num >= 20:
-                    color = '#FF3333'  # Red for negative
-                else:
-                    color = '#990000'  # Dark red for very negative
+                color = '#00FF00' if score_num >= 90 else '#66CC33' if score_num >= 75 else '#FFCC33' if score_num >= 60 else '#FF9933' if score_num >= 40 else '#FF3333' if score_num >= 20 else '#990000'
+                sentiment_color = {'positive': '#66FF66', 'mixed': '#FFD700', 'negative': '#FF4444'}.get(sentiment.lower(), '#CCCCCC')
                 
-                sentiment_color = {
-                    'positive': '#66FF66',
-                    'mixed': '#FFD700', 
-                    'negative': '#FF4444'
-                }.get(sentiment.lower(), '#CCCCCC')
-                
-                self.metascoreValue.setText(
-                    f'<span style="color: {color}; font-weight: bold; font-size: 14px;">{score}</span> - '
-                    f'<span style="color: {sentiment_color};">{sentiment}</span>'
-                )
+                self.metascoreValue.setText(f'<span style="color: {color}; font-weight: bold; font-size: 14px;">{score}</span> - <span style="color: {sentiment_color};">{sentiment}</span>')
                 self.metascoreValue.setTextFormat(Qt.RichText)
 
             # User Score if available
@@ -529,37 +522,19 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
                 
                 score_text = user_score['score']
                 sentiment = user_score.get('sentiment', '')
+                
                 if score_text == 'tbd':
-                    color = '#888888'  # Gray for TBD
-                    score_value = 0
+                    color = '#888888'
+                    display_text = 'TBD'
                 else:
                     score_value = float(score_text)
-                    if score_value >= 9.0:
-                        color = '#00FF00'  # Bright green for exceptional
-                    elif score_value >= 7.5:
-                        color = '#66CC33'  # Green for very good
-                    elif score_value >= 6.0:
-                        color = '#FFCC33'  # Yellow for good
-                    elif score_value >= 4.0:
-                        color = '#FF9933'  # Orange for mediocre
-                    elif score_value >= 2.0:
-                        color = '#FF3333'  # Red for poor
-                    else:
-                        color = '#990000'  # Dark red for very poor
+                    color = '#00FF00' if score_value >= 9.0 else '#66CC33' if score_value >= 7.5 else '#FFCC33' if score_value >= 6.0 else '#FF9933' if score_value >= 4.0 else '#FF3333' if score_value >= 2.0 else '#990000'
+                    display_text = f'{score_value:.1f}'
                 
-                sentiment_color = {
-                    'positive': '#66FF66',
-                    'mixed': '#FFD700',
-                    'negative': '#FF4444'
-                }.get(sentiment.lower(), '#CCCCCC')
-                
-                display_text = 'TBD' if score_text == 'tbd' else f'{score_value:.1f}'
+                sentiment_color = {'positive': '#66FF66', 'mixed': '#FFD700', 'negative': '#FF4444'}.get(sentiment.lower(), '#CCCCCC')
                 sentiment_text = f' - <span style="color: {sentiment_color};">{sentiment}</span>' if sentiment else ''
                 
-                self.userScoreValue.setText(
-                    f'<span style="color: {color}; font-weight: bold; font-size: 14px;">{display_text}</span>'
-                    f'{sentiment_text}'
-                )
+                self.userScoreValue.setText(f'<span style="color: {color}; font-weight: bold; font-size: 14px;">{display_text}</span>{sentiment_text}')
                 self.userScoreValue.setTextFormat(Qt.RichText)
 
             # Genre if available
@@ -567,54 +542,96 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
                 self.genreLabel.setText("Genres:")
                 self.genreValue.setText(', '.join(meta_data['genre']))
 
-            # Director if available
-            if 'director' in meta_data:
-                director_container = QWidget()
-                director_layout = QHBoxLayout(director_container)
-                director_layout.setContentsMargins(0, 0, 0, 0)
-                
-                director_label = QLabel("Director:")
-                director_value = QLabel(meta_data['director'])
-                director_layout.addWidget(director_label)
-                director_layout.addWidget(director_value)
-                scroll_layout.addWidget(director_container)
+        # Create scroll widget if needed
+        if not self.detailsScrollArea.widget():
+            scroll_widget = QWidget()
+            scroll_layout = QVBoxLayout(scroll_widget)
+            scroll_layout.setSpacing(15)
+            self.detailsScrollArea.setWidget(scroll_widget)
+        else:
+            scroll_widget = self.detailsScrollArea.widget()
+            scroll_layout = scroll_widget.layout()
+            while scroll_layout.count():
+                child = scroll_layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
 
-            # Cast if available
-            if 'cast' in meta_data and meta_data['cast']:
-                cast_container = QWidget()
-                cast_layout = QVBoxLayout(cast_container)
-                cast_layout.setContentsMargins(0, 0, 0, 0)
-                
-                cast_label = QLabel("Cast:")
-                cast_names = [actor['name'] for actor in meta_data['cast']]
-                cast_value = QLabel(', '.join(cast_names))
-                cast_value.setWordWrap(True)
-                cast_layout.addWidget(cast_label)
-                cast_layout.addWidget(cast_value)
-                scroll_layout.addWidget(cast_container)
+        # Handle all metadata
+        if movie.metadata:
+            merged_info = {}
+            for source_data in movie.metadata.values():
+                if 'info' in source_data:
+                    self._merge_metadata(merged_info, source_data['info'])
 
-            # Add stretch at the end to push everything up
+            # Display merged metadata
+            container = QWidget()
+            container_layout = QVBoxLayout(container)
+            container_layout.setContentsMargins(10, 0, 10, 20)
+            container_layout.setSpacing(10)
+
+            def add_metadata_section(data, layout, indent=0):
+                if isinstance(data, dict):
+                    for key, value in data.items():
+                        if key in ['url', 'error'] or value is None:
+                            continue
+                        display_key = key.replace('_', ' ').title()
+                        
+                        # Special formatting for cast
+                        if key == 'cast' and isinstance(value, list):
+                            layout.addWidget(QLabel(f'<h3 style="color: #CCCCCC; font-size: 18px; font-weight: 500; margin-left: {indent}px;">Cast:</h3>'))
+                            for actor in value:
+                                text = actor.get('name', '') + (' as ' + actor.get('role', '') if isinstance(actor, dict) and actor.get('role') else '') if isinstance(actor, dict) else actor
+                                content = QLabel(f'<span style="color: #E0E0E0;">{text}</span>')
+                                content.setWordWrap(True)
+                                content.setStyleSheet(f"margin-left: {indent + 20}px;")
+                                layout.addWidget(content)
+                            continue
+                            
+                        if isinstance(value, (dict, list)):
+                            label = QLabel(f'<h3 style="color: #CCCCCC; font-size: 18px; font-weight: 500; margin-left: {indent}px;">{display_key}:</h3>')
+                            layout.addWidget(label)
+                            add_metadata_section(value, layout, indent + 20)
+                        else:
+                            content = QLabel(f'<span style="color: #E0E0E0; font-weight: 500;">{display_key}:</span> <span style="color: #FFFFFF;">{value}</span>')
+                            content.setWordWrap(True)
+                            content.setStyleSheet(f"margin-left: {indent}px;")
+                            layout.addWidget(content)
+                elif isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict):
+                            item_widget = QWidget()
+                            item_layout = QVBoxLayout(item_widget)
+                            item_layout.setContentsMargins(indent, 5, 0, 5)
+                            add_metadata_section(item, item_layout, 0)
+                            layout.addWidget(item_widget)
+                        else:
+                            content = QLabel(f'<span style="color: #FFFFFF;">{item}</span>')
+                            content.setWordWrap(True)
+                            content.setStyleSheet(f"margin-left: {indent}px;")
+                            layout.addWidget(content)
+
+            add_metadata_section(merged_info, container_layout)
+            scroll_layout.addWidget(container)
             scroll_layout.addStretch()
 
         # Set YouTube trailer link if available
         if hasattr(movie, 'yt_trailer_code') and movie.yt_trailer_code:
             self.ytLabel.setText("Trailer:")
             trailer_url = f"https://www.youtube.com/watch?v={movie.yt_trailer_code}"
-            self.ytValue.setText(f'''
-                <a href="{trailer_url}" style="
-                    color: #2196F3;
-                    text-decoration: none;
-                    font-weight: 500;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    transition: all 0.2s ease;
-                ">Watch Trailer</a>
-            ''')
+            self.ytValue.setText(f'<a href="{trailer_url}" style="color: #2196F3; text-decoration: none; font-weight: 500; padding: 4px 8px; border-radius: 4px; transition: all 0.2s ease;">Watch Trailer</a>')
             self.ytValue.setOpenExternalLinks(True)
         else:
             self.ytLabel.setText("Trailer:")
             self.ytValue.setText("Not available")
 
+    def _merge_metadata(self, target, source):
+        for key, value in source.items():
+            if key not in target:
+                target[key] = value
+            elif isinstance(target[key], dict) and isinstance(value, dict):
+                self._merge_metadata(target[key], value)
+            elif isinstance(target[key], list) and isinstance(value, list):
+                target[key].extend(value)
     def _setup_titlebar(self):
         # Create and add titlebar widgets
         titlebar_layout = QHBoxLayout()
@@ -671,14 +688,15 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
         self.closeButton.clicked.connect(self.close)
         
         # Enable mouse dragging for the window
-        self.titleLabel.mousePressEvent = self._get_pos
-        self.titleLabel.mouseMoveEvent = self._move_window
+        titlebar_widget.mousePressEvent = self._get_pos
+        titlebar_widget.mouseMoveEvent = self._move_window
 
     def _get_pos(self, event):
-        self.clickPosition = event.globalPos()
+        if event.button() == Qt.LeftButton:
+            self.clickPosition = event.globalPos()
 
     def _move_window(self, event):
-        if hasattr(self, 'clickPosition'):
+        if hasattr(self, 'clickPosition') and event.buttons() == Qt.LeftButton:
             self.move(self.pos() + event.globalPos() - self.clickPosition)
             self.clickPosition = event.globalPos()
 
@@ -689,6 +707,15 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
         else:
             self.showMaximized()
             self.maximizeButton.setIcon(QIcon("icons/restore.png"))
+
+    def _update_sources(self, category: str):
+        """Update sources in sourceComboBox based on selected category"""
+        self.sourceComboBox.clear()
+        
+        # Show sources for selected category
+        sources = self.categories.get(category, [])
+        for source in sources:
+            self.sourceComboBox.addItem(source.config["name"], source)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
