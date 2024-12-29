@@ -1,0 +1,355 @@
+/* Global styles for all widgets */
+* {
+    font-family: "Segoe UI", "SF Pro Display", "Roboto", system-ui, -apple-system, sans-serif;
+    font-size: 16px; /* Increased font size */
+    color: #E0E0E0; /* Light grey for text */
+    background-color: transparent;
+    border-radius: 20px;
+}
+
+/* Main window */
+QMainWindow {
+    background-color: transparent;
+    border-radius: 20px; /* Round corners */
+}
+
+#titleLabel {
+    color: white;
+    font-family: "Segoe UI", "SF Pro Display", "Roboto", system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 0;
+    margin: 0;
+    border-radius: 8px;
+}
+
+#minimizeButton, #maximizeButton, #closeButton {
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: white;
+    background: #2D2D2D;
+    border-radius: 8px;
+    font-weight: 600; /* Semi-bold for buttons */
+}
+
+#minimizeButton:hover, #maximizeButton:hover {
+    background: #404040;
+    border-radius: 8px;
+}
+
+#closeButton {
+    background: #c41e3a;
+}
+
+#closeButton:hover {
+    background: #e81123;
+    border-radius: 8px;
+}
+
+/* All labels */
+QLabel {
+    padding: 5px;
+    color: #E0E0E0;
+    background-color: transparent;
+}
+
+/* All line edits */
+QLineEdit {
+    padding: 8px;
+    border: 2px solid #9C27B0; /* Purple accent */
+    border-radius: 20px;
+    background-color: transparent;
+    font-size: 18px; /* Increased for better readability */
+}
+
+QLineEdit:focus {
+    border-color: #D500F9; /* Brighter purple on focus */
+}
+
+/* All combo boxes */
+QComboBox {
+    padding: 8px;
+    border: 2px solid #9C27B0; /* Purple accent */
+    border-radius: 20px;
+    background-color: transparent;
+    font-size: 16px;
+    color: #E0E0E0; /* Light grey text to match theme */
+}
+
+QComboBox:hover {
+    border-color: #D500F9; /* Brighter purple on hover */
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 30px;
+    padding-right: 10px;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    border: none;
+}
+
+QComboBox QAbstractItemView {
+    border: 2px solid #9C27B0;
+    border-radius: 10px;
+    background-color: #212121;
+    selection-background-color: #7B1FA2;
+    padding: 5px;
+}
+
+QComboBox::item {
+    padding: 5px;
+    min-height: 25px;
+}
+
+QComboBox::item:enabled:selected {
+    color: #E0E0E0; /* Light grey for selected items */
+    background-color: #7B1FA2;
+}
+
+QComboBox::item:enabled:!selected {
+    color: #E0E0E0; /* Light grey for non-selected items */
+}
+
+QComboBox::item:!enabled {
+    color: #9E9E9E; /* Medium grey for category headers */
+    background-color: #1A1A1A; /* Slightly darker background */
+    font-weight: bold;
+    padding-top: 8px; /* More spacing above headers */
+    padding-bottom: 4px;
+}
+
+/* All push buttons */
+QPushButton {
+    background-color: transparent;
+    color: #E0E0E0;
+    padding: 10px 20px;
+    border: 2px solid #9C27B0; /* Purple accent */
+    border-radius: 15px;
+    font-weight: bold;
+    font-size: 16px; /* Increased font size */
+}
+
+QPushButton:hover {
+    background-color: #9C27B0; /* Purple accent on hover */
+}
+
+QPushButton:pressed {
+    background-color: #7B1FA2; /* Darker purple on press */
+}
+
+/* All scroll areas */
+QScrollArea {
+    background-color: transparent;
+    border: none;
+    border-radius: 20px;
+}
+
+/* Specific widgets */
+QScrollArea#resultsScrollArea, QWidget#resultsArea {
+    background-color: transparent;
+}
+
+/* All scroll bars */
+QScrollBar:vertical {
+    border: none;
+    background: rgba(156, 39, 176, 0.1); /* Very subtle purple tint */
+    width: 14px; /* Slightly wider */
+    border-radius: 7px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                               stop:0 #9C27B0, stop:1 #AB47BC); /* Gradient purple */
+    border-radius: 7px;
+    min-height: 40px; /* Taller minimum height */
+    border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
+}
+
+QScrollBar::handle:vertical:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                               stop:0 #D500F9, stop:1 #E040FB); /* Brighter gradient on hover */
+    border: 1px solid rgba(255, 255, 255, 0.2); /* More visible border on hover */
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+    background: none;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 rgba(255, 255, 255, 0.03),
+                               stop:0.5 rgba(255, 255, 255, 0.07),
+                               stop:1 rgba(255, 255, 255, 0.03)); /* Subtle gradient track */
+}
+
+/* All tab widgets */
+QTabWidget::pane {
+    border: none;
+    border-radius: 20px;
+    background-color: transparent;
+}
+
+QTabBar::tab {
+    background-color: transparent;
+    padding: 8px 15px;
+    border: none;
+    border-top-left-radius: 15px;
+    border-top-right-radius: 15px;
+    font-size: 16px; /* Increased font size */
+}
+
+QTabBar::tab:selected {
+    background-color: #9C27B0; /* Purple accent */
+    color: #E0E0E0;
+    border-bottom: none;
+}
+
+/* All text edits */
+QTextEdit {
+    border: none;
+    background-color: transparent;
+    font-size: 16px; /* Increased font size */
+}
+
+/* Menu styling */
+QMenuBar {
+    background-color: transparent;
+    border: none;
+}
+
+QMenuBar::item {
+    padding: 5px 10px;
+}
+
+QMenuBar::item:selected {
+    background-color: #9C27B0; /* Purple accent */
+}
+
+
+
+QListWidget {
+    background-color: transparent;
+    border: none;
+    border-radius: 20px;
+    padding: 5px;
+    font-size: 16px; /* Increased font size */
+}
+
+QListWidget::item {
+    padding: 5px;
+    border-radius: 15px;
+    background-color: transparent;
+}
+
+QListWidget::item:hover {
+    background-color: #9C27B0; /* Purple accent on hover */
+}
+
+QListWidget::item:selected {
+    background-color: #7B1FA2; /* Darker purple on select */
+    color: #E0E0E0;
+}
+
+/* specific styling */
+
+QLabel#posterLabel {
+    padding: 8px;
+    background-color: transparent;
+}
+
+QGroupBox#InfoGroupBox {
+    border: none;
+    border-radius: 20px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+QLineEdit#searchInput {
+    border: 2px solid #9C27B0; /* Purple accent */
+    border-radius: 15px;
+    padding: 8px;
+    background-color: transparent;
+    font-size: 18px; /* Increased font size */
+}
+
+QLabel#movieTitleLabel {
+    font-size: 30px; /* Increased for better visibility */
+    font-weight: bold;
+    color: #E0E0E0;
+    padding: 10px 0;
+    background-color: transparent;
+}
+
+QLabel#imdbRatingLabel {
+    font-size: 22px; /* Increased for better visibility */
+    font-weight: bold;
+    color: #FFC107;  /* Gold color for rating */
+    background-color: transparent;
+}
+
+QLabel#genresLabel {
+    font-style: italic;
+    color: #BDBDBD; /* Light grey for genres */
+    background-color: transparent;
+    font-size: 18px; /* Increased font size */
+}
+
+QLabel#plotLabel {
+    color: #BDBDBD; /* Light grey for plot */
+    line-height: 1.4;
+    padding: 10px;
+    background-color: transparent;
+    font-size: 17px; /* Increased font size */
+}
+
+/* Value labels for movie details */
+QLabel[objectName$="Value"] {
+    color: #BDBDBD; /* Light grey for values */
+    font-weight: normal;
+    background-color: transparent;
+    font-size: 16px; /* Increased font size */
+}
+
+/* Torrent table styling */
+QTableWidget {
+    background-color: transparent;
+    border: none;
+    border-radius: 20px;
+    gridline-color: #9C27B0; /* Purple accent */
+    font-size: 16px; /* Increased font size */
+}
+
+QTableWidget::item {
+    padding: 8px;
+    background-color: transparent;
+}
+
+QTableWidget::item:selected {
+    background-color: #7B1FA2; /* Darker purple on select */
+    color: #E0E0E0;
+}
+
+QHeaderView::section {
+    background-color: transparent;
+    padding: 8px;
+    border: none;
+    font-weight: bold;
+    color: #E0E0E0;
+    font-size: 17px; /* Increased font size */
+}
+
+QTableWidget QPushButton {
+    min-width: 100px;
+    max-width: 150px;
+    background-color: transparent;
+    font-size: 16px; /* Increased font size */
+}
+
+
+
