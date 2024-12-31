@@ -3,7 +3,7 @@ import requests
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 import re
@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from collections import defaultdict
 import time
 import json
+import os
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -541,6 +542,35 @@ class RottenTomatoesSource(MetadataSource):
             'release_date': '',
             'error': None
         }
+    
+def rotten_scores(title: str, type:str):
+
+    if type == 'movie':
+        url = f"https://www.rottentomatoes.com/m/{title}"
+    elif type == 'tv':
+        url = f"https://www.rottentomatoes.com/tv/{title}"
+    else:
+        return None
+    # Send HTTP request and get the HTML content
+    response = requests.get(url)
+    html_content = response.text
+    
+    # Create BeautifulSoup object to parse HTML
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # Find critics score (Tomatometer)
+    critics_score = soup.find('rt-text', {'slot': 'criticsScore'})
+    critics_score = critics_score.text.strip() if critics_score else 'N/A'
+    
+    # Find audience score (Popcornmeter) 
+    audience_score = soup.find('rt-text', {'slot': 'audienceScore'})
+    audience_score = audience_score.text.strip() if audience_score else 'N/A'
+    
+    return {
+        'critics_score': critics_score,
+        'audience_score': audience_score
+    }
+
 
 class MovieMetadata:
     def __init__(self):
@@ -587,10 +617,67 @@ class MovieMetadata:
                 
         return metadata
 
+class Cache:
+    """File-based cache system with daily expiration"""
+    def __init__(self, cache_dir: str = ".cache"):
+        self.cache_dir = cache_dir
+        self.cache_duration = timedelta(days=1)
+        self._ensure_cache_dir()
+    
+    def _ensure_cache_dir(self):
+        """Create cache directory if it doesn't exist"""
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
+    
+    def _get_cache_path(self, key: str) -> str:
+        """Generate a safe filename for the cache key"""
+        # Create a safe filename from the key
+        safe_key = "".join(c for c in key if c.isalnum() or c in ('-', '_')).rstrip()
+        return os.path.join(self.cache_dir, f"{safe_key}.json")
+    
+    def get(self, key: str) -> Optional[dict]:
+        """Retrieve data from cache if not expired"""
+        try:
+            cache_path = self._get_cache_path(key)
+            if not os.path.exists(cache_path):
+                return None
+            
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                cached_data = json.load(f)
+            
+            # Check if cache has expired
+            cached_time = datetime.fromisoformat(cached_data['timestamp'])
+            if datetime.now() - cached_time > self.cache_duration:
+                os.remove(cache_path)  # Clean up expired cache
+                return None
+                
+            return cached_data['data']
+            
+        except Exception as e:
+            logger.warning(f"Cache read error for {key}: {e}")
+            return None
+    
+    def set(self, key: str, data: Any) -> None:
+        """Store data in cache with timestamp"""
+        try:
+            cache_path = self._get_cache_path(key)
+            cache_data = {
+                'timestamp': datetime.now().isoformat(),
+                'data': data
+            }
+            
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, ensure_ascii=False, indent=2)
+                
+        except Exception as e:
+            logger.warning(f"Cache write error for {key}: {e}")
+
 class TorrentSearcher:
     def __init__(self):
         self.current_source = TorrentSource.YTS
-        self._session = self._create_session()  # Add persistent session
+        self._session = self._create_session()
+        self.cache = Cache()  # File-based cache
+        self._request_cache = {}  # In-memory session cache for URLs
         
     def _create_session(self) -> requests.Session:
         """Create a configured requests session"""
@@ -616,6 +703,44 @@ class TorrentSearcher:
             logger.error(f"Search failed for {source.config['name']}: {str(e)}")
             raise MovieSearchError(f"Search failed: {str(e)}")
 
+    def _make_request(self, url: str, method: str = 'GET', **kwargs) -> requests.Response:
+        """Make a request with session-level caching"""
+        cache_key = f"{method}:{url}"
+        
+        # Check in-memory cache first
+        if cache_key in self._request_cache:
+            logger.debug(f"Using cached response for: {url}")
+            return self._request_cache[cache_key]
+            
+        # Make the actual request
+        response = self._session.request(method, url, **kwargs)
+        
+        # Cache successful responses
+        if response.status_code == 200:
+            self._request_cache[cache_key] = response
+            
+        return response
+    
+    def _get_image_url(self, url: str) -> str:
+        """Handle image URL redirects with caching"""
+        cache_key = f"image_redirect:{url}"
+        
+        # Check cache first
+        if cache_key in self._request_cache:
+            return self._request_cache[cache_key]
+            
+        try:
+            response = self._session.head(url, allow_redirects=True)
+            final_url = response.url
+            
+            # Cache the final URL after redirect
+            self._request_cache[cache_key] = final_url
+            return final_url
+            
+        except Exception as e:
+            logger.warning(f"Failed to resolve image URL {url}: {e}")
+            return url
+
     def _search_yts(self, query: str, limit: int) -> List[Movie]:
         """Search YTS.mx API for movies"""
         source_config = TorrentSource.YTS.config
@@ -630,7 +755,7 @@ class TorrentSearcher:
 
         try:
             logger.debug(f"Searching for {query} on {api_url}")
-            response = make_api_request(api_url, params=params)
+            response = self._make_request(api_url, params=params)
             response.raise_for_status()
             data = response.json()
 
@@ -671,6 +796,13 @@ class TorrentSearcher:
                 )
                 movies.append(movie)
 
+            # Handle image URLs
+            for movie_data in data['data']['movies']:
+                if 'large_cover_image' in movie_data:
+                    movie_data['large_cover_image'] = self._get_image_url(movie_data['large_cover_image'])
+                if 'background_image_original' in movie_data:
+                    movie_data['background_image_original'] = self._get_image_url(movie_data['background_image_original'])
+
             return movies
 
         except requests.exceptions.HTTPError as e:
@@ -688,6 +820,13 @@ class TorrentSearcher:
         tmdb_client = TMDBClient()
         
         try:
+            # Check cache first
+            cache_key = f"leetx_search_{query}_{limit}"
+            cached_results = self.cache.get(cache_key)
+            if cached_results:
+                logger.debug(f"Retrieved results from cache for query: {query}")
+                return [Movie(**movie_data) for movie_data in cached_results]
+
             session = requests.Session()
             session.headers.update({
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -851,7 +990,11 @@ class TorrentSearcher:
                     logger.warning(f"Failed to get TMDB data for {show_name}: {e}")
                     continue
 
-            return sorted(final_results, key=lambda x: (x.title, x.year))
+            # Cache the results before returning
+            cache_data = [movie._asdict() for movie in final_results]
+            self.cache.set(cache_key, cache_data)
+            
+            return final_results
 
         except requests.exceptions.HTTPError as e:
             raise MovieAPIError(f"Failed to fetch TV series: {str(e)}")
@@ -946,6 +1089,34 @@ class TorrentSearcher:
         except Exception as e:
             logger.error(f"Error parsing title '{raw_title}': {str(e)}")
             return None
+
+    def _get_torrent_details(self, url: str) -> dict:
+        """Get details from torrent page with caching"""
+        try:
+            # Check cache first
+            cache_key = f"torrent_details_{url}"
+            cached_data = self.cache.get(cache_key)
+            if cached_data:
+                return cached_data
+
+            # Fetch and parse the page
+            detail_response = self._session.get(url)
+            detail_soup = BeautifulSoup(detail_response.text, 'html.parser')
+            
+            # Extract details
+            details = {
+                'magnet': detail_soup.select_one('a[href^="magnet:"]')['href'],
+                # Add any other details you want to extract
+            }
+            
+            # Cache the results
+            self.cache.set(cache_key, details)
+            
+            return details
+            
+        except Exception as e:
+            logger.warning(f"Failed to get torrent details for {url}: {e}")
+            return {}
 
 # Define a single request template with timeout and retries
 def make_api_request(api_url: str, params: Optional[dict] = None, headers: Optional[dict] = None) -> requests.Response:

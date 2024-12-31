@@ -192,7 +192,50 @@ QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
                                stop:0.5 rgba(255, 255, 255, 0.07),
                                stop:1 rgba(255, 255, 255, 0.03)); /* Subtle gradient track */
 }
+QTextBrowser {
+    background-color: transparent;
+    border: none;
+    border-radius: 20px;
+}
 
+QTextBrowser QScrollBar:vertical, QTextBrowser QScrollBar:horizontal {
+    border: none;
+    background: rgba(156, 39, 176, 0.1); /* Very subtle purple tint */
+    width: 14px; /* Slightly wider */
+    height: 14px; /* Slightly wider for horizontal */
+    border-radius: 7px;
+    margin: 2px;
+}
+
+QTextBrowser QScrollBar::handle:vertical, QTextBrowser QScrollBar::handle:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                               stop:0 #9C27B0, stop:1 #AB47BC); /* Gradient purple */
+    border-radius: 7px;
+    min-height: 40px; /* Taller minimum height for vertical */
+    min-width: 40px; /* Wider minimum width for horizontal */
+    border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
+}
+
+QTextBrowser QScrollBar::handle:vertical:hover, QTextBrowser QScrollBar::handle:horizontal:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                               stop:0 #D500F9, stop:1 #E040FB); /* Brighter gradient on hover */
+    border: 1px solid rgba(255, 255, 255, 0.2); /* More visible border on hover */
+}
+
+QTextBrowser QScrollBar::add-line:vertical, QTextBrowser QScrollBar::sub-line:vertical,
+QTextBrowser QScrollBar::add-line:horizontal, QTextBrowser QScrollBar::sub-line:horizontal {
+    height: 0;
+    width: 0; /* No width for horizontal */
+    background: none;
+}
+
+QTextBrowser QScrollBar::add-page:vertical, QTextBrowser QScrollBar::sub-page:vertical,
+QTextBrowser QScrollBar::add-page:horizontal, QTextBrowser QScrollBar::sub-page:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 rgba(255, 255, 255, 0.03),
+                               stop:0.5 rgba(255, 255, 255, 0.07),
+                               stop:1 rgba(255, 255, 255, 0.03)); /* Subtle gradient track */
+}
 /* All tab widgets */
 QTabWidget::pane {
     border: none;

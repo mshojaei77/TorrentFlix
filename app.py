@@ -17,9 +17,7 @@ from PyQt5.QtCore import Qt, QFile, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QBrush, QPalette, QColor
 from PyQt5.QtCore import QSize, QSettings
 from app_ui import Ui_MainWindow
-from torrent_search import TorrentSearcher, TorrentSource, Movie, MovieSearchError, Torrent, ConnectionBlockedError, MovieMetadata
-from movie_info_mata import get_metacritic_info
-
+from torrent_search import TorrentSearcher, TorrentSource, Movie,Torrent, MovieMetadata, rotten_scores
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -125,6 +123,17 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
         # Initial population of sources with first category
         first_category = list(categories.keys())[0]
         self._update_sources(first_category)
+
+        # Set size policy for textBrowser_details to expand vertically
+        self.textBrowser_details.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Expanding
+        )
+        # Set minimum height to ensure it's visible
+        self.textBrowser_details.setMinimumHeight(400)
+        
+        # Optional: Set maximum height if you want to limit expansion
+        # self.textBrowser_details.setMaximumHeight(800)
 
     def _load_stylesheet(self):
         style_file = QFile("style.qss")
@@ -234,12 +243,9 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
             else:
                 self._clear_results()
 
-        except ConnectionBlockedError as e:
-            logger.error(f"Connection blocked: {str(e)}")
-            self._show_error("ERROR: Please enable your VPN before searching for torrents!", "vpnErrorLabel")
-        except MovieSearchError as e:
-            logger.error(f"Search failed: {str(e)}")
-            self._show_error(f"Error: {str(e)}")
+        except Exception as e:
+            logger.error(f"An error occurred during search: {e}")
+            self._show_error("An unexpected error occurred. Please try again later.")
 
     def _show_error(self, message: str, label_id: str = "errorLabel"):
         self._clear_results()
@@ -293,13 +299,13 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
                     self.download_threads.append(downloader)
 
     def _setup_torrents_tab(self, torrents: List[Torrent]):
-        # Remove existing layout if it exists
-        if self.torrentsTab.layout():
-            QWidget().setLayout(self.torrentsTab.layout())
-    
-        # Create main layout
-        main_layout = QVBoxLayout()
-        
+        # Clear existing items in gridLayout_downloads
+        while self.gridLayout_downloads.count():
+            item = self.gridLayout_downloads.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
         # Create scroll area and its widget
         scroll_area = QScrollArea()
         scroll_widget = QWidget()
@@ -344,10 +350,8 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
         scroll_area.setWidget(scroll_widget)
         scroll_area.setWidgetResizable(True)
         
-        # Add scroll area to main layout
-        main_layout.addWidget(scroll_area)
-        
-        self.torrentsTab.setLayout(main_layout)
+        # Add scroll area directly to gridLayout_downloads
+        self.gridLayout_downloads.addWidget(scroll_area)
 
     def _download_torrent(self, torrent: Torrent):
         fdm_path = r"C:\Program Files\Softdeluxe\Free Download Manager\fdm.exe"
@@ -458,11 +462,13 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
     def _display_metadata(self, movie: Movie):
         # Set movie title if available
         if hasattr(movie, 'title'):
-            self.movieTitleLabel.setText(movie.title)
+            self.movieTitleLabel.setText(f"{movie.title}")
         
         # Set IMDb rating if available
         if hasattr(movie, 'rating'):
-            self.imdbRatingLabel.setText(f"★ {movie.rating}/10")
+            rating = float(movie.rating)
+            color = '#FFD700' if rating >= 8.0 else '#FFA500' if rating >= 6.0 else '#FF4444'
+            self.imdbRatingLabel.setText(f'<span style="color: {color};">⭐ {rating}/10</span>')
         else:
             self.imdbRatingLabel.setText("Rating not available")
         
@@ -486,17 +492,8 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
         
         # Set basic movie details if available
         if hasattr(movie, 'year'):
-            self.releaseYearLabel.setText("Release Year:")
-            self.releaseYearValue.setText(str(movie.year))
-            
-        if hasattr(movie, 'language'):
-            self.languageLabel.setText("Language:")
-            self.languageValue.setText(movie.language)
-            
-        if hasattr(movie, 'runtime'):
-            self.durationLabel.setText("Duration:")
-            self.durationValue.setText(f"{movie.runtime} min")
-
+            self.releaseYearLabel.setText("📅 Release Year:")
+            self.releaseYearValue.setText(f'<span style="font-weight: bold;">{movie.year}</span>')
         # Handle Metacritic metadata if available
         if movie.metadata and 'metacritic' in movie.metadata:
             meta_data = movie.metadata['metacritic']['info']
@@ -504,11 +501,12 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
             # Display Metascore if available
             if 'metascore' in meta_data:
                 metascore = meta_data['metascore']
-                self.metascoreLabel.setText('<span style="color: #E0E0E0;">Metascore:</span>')
+                self.metascoreLabel.setText('<span style="color: #E0E0E0;">📊 Metascore:</span>')
                 score = metascore['score']
                 sentiment = metascore['sentiment']
                 
                 score_num = int(score)
+                # Color based on score value
                 color = '#00FF00' if score_num >= 90 else '#66CC33' if score_num >= 75 else '#FFCC33' if score_num >= 60 else '#FF9933' if score_num >= 40 else '#FF3333' if score_num >= 20 else '#990000'
                 sentiment_color = {'positive': '#66FF66', 'mixed': '#FFD700', 'negative': '#FF4444'}.get(sentiment.lower(), '#CCCCCC')
                 
@@ -518,43 +516,145 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
             # User Score if available
             if 'user_score' in meta_data:
                 user_score = meta_data['user_score']
-                self.userScoreLabel.setText('<span style="color: #E0E0E0;">User Score:</span>')
+                self.userScoreLabel.setText('<span style="color: #E0E0E0;">👥 User Score:</span>')
                 
                 score_text = user_score['score']
                 sentiment = user_score.get('sentiment', '')
                 
                 if score_text == 'tbd':
-                    color = '#888888'
+                    color = '#666666'
                     display_text = 'TBD'
                 else:
                     score_value = float(score_text)
-                    color = '#00FF00' if score_value >= 9.0 else '#66CC33' if score_value >= 7.5 else '#FFCC33' if score_value >= 6.0 else '#FF9933' if score_value >= 4.0 else '#FF3333' if score_value >= 2.0 else '#990000'
+                    # Color based on score value
+                    color = '#00FF00' if score_value >= 9.0 else \
+                           '#66CC33' if score_value >= 8.0 else \
+                           '#FFCC33' if score_value >= 7.0 else \
+                           '#FF9933' if score_value >= 6.0 else \
+                           '#FF3333' if score_value >= 5.0 else '#990000'
                     display_text = f'{score_value:.1f}'
                 
-                sentiment_color = {'positive': '#66FF66', 'mixed': '#FFD700', 'negative': '#FF4444'}.get(sentiment.lower(), '#CCCCCC')
+                # Color based on sentiment value
+                sentiment_color = {
+                    'positive': '#00FF00',  # Bright green for positive
+                    'mixed': '#FFCC33',     # Yellow for mixed
+                    'negative': '#FF3333'    # Red for negative
+                }.get(sentiment.lower(), '#999')
+                
                 sentiment_text = f' - <span style="color: {sentiment_color};">{sentiment}</span>' if sentiment else ''
                 
-                self.userScoreValue.setText(f'<span style="color: {color}; font-weight: bold; font-size: 14px;">{display_text}</span>{sentiment_text}')
+                self.userScoreValue.setText(
+                    f'<span style="color: {color}; font-weight: bold; font-size: 16px; '
+                    f'font-family: Arial, sans-serif;">{display_text}</span>{sentiment_text}'
+                )
                 self.userScoreValue.setTextFormat(Qt.RichText)
+
+            # Get Rotten Tomatoes scores
+            rt_scores = rotten_scores(movie.title.replace(' ', '_'), 'movie')
+            
+            # Display critics score if available
+            if rt_scores and rt_scores['critics_score'] != 'N/A':
+                self.tomatometerLabel.setText('<span style="color: #E0E0E0;">🍅 Tomatometer:</span>')
+                score = rt_scores['critics_score'].rstrip('%')
+                score_num = int(score)
+                # Color based on score value
+                color = '#00FF00' if score_num >= 90 else \
+                       '#66CC33' if score_num >= 75 else \
+                       '#FFCC33' if score_num >= 60 else \
+                       '#FF9933' if score_num >= 40 else \
+                       '#FF3333' if score_num >= 20 else '#990000'
+                self.tomatometerValue.setText(f'<span style="color: {color}; font-weight: bold; font-size: 14px;">{score}%</span>')
+                self.tomatometerValue.setTextFormat(Qt.RichText)
+
+            # Display audience score if available  
+            if rt_scores and rt_scores['audience_score'] != 'N/A':
+                self.popcornmeterLabel.setText('<span style="color: #E0E0E0;">🍿 Audience Score:</span>')
+                score = rt_scores['audience_score'].rstrip('%')
+                score_num = int(score)
+                # Color based on score value
+                color = '#00FF00' if score_num >= 90 else \
+                       '#66CC33' if score_num >= 75 else \
+                       '#FFCC33' if score_num >= 60 else \
+                       '#FF9933' if score_num >= 40 else \
+                       '#FF3333' if score_num >= 20 else '#990000'
+                self.popcornmeterValue.setText(f'<span style="color: {color}; font-weight: bold; font-size: 14px;">{score}%</span>')
+                self.popcornmeterValue.setTextFormat(Qt.RichText)
 
             # Genre if available
             if 'genre' in meta_data and meta_data['genre']:
-                self.genreLabel.setText("Genres:")
-                self.genreValue.setText(', '.join(meta_data['genre']))
+                self.genreLabel.setText("🎭 Genres:")
+                self.genreValue.setText(f'<span style="color: #FF9800;">{", ".join(meta_data["genre"])}</span>')
 
-        # Create scroll widget if needed
-        if not self.detailsScrollArea.widget():
-            scroll_widget = QWidget()
-            scroll_layout = QVBoxLayout(scroll_widget)
-            scroll_layout.setSpacing(15)
-            self.detailsScrollArea.setWidget(scroll_widget)
+        # Keep YouTube trailer link handling
+        if hasattr(movie, 'yt_trailer_code') and movie.yt_trailer_code:
+            self.ytLabel.setText("🎬 Trailer:")
+            trailer_url = f"https://www.youtube.com/watch?v={movie.yt_trailer_code}"
+            self.ytValue.setText(f'<a href="{trailer_url}" style="color: #2196F3; text-decoration: none; font-weight: 500; padding: 4px 8px; border-radius: 4px; transition: all 0.2s ease;">Watch Trailer</a>')
+            self.ytValue.setOpenExternalLinks(True)
         else:
-            scroll_widget = self.detailsScrollArea.widget()
-            scroll_layout = scroll_widget.layout()
-            while scroll_layout.count():
-                child = scroll_layout.takeAt(0)
-                if child.widget():
-                    child.widget().deleteLater()
+            self.ytLabel.setText("🎬 Trailer:")
+            self.ytValue.setText('<span style="color: #757575;">Not available</span>')
+
+        # Clear previous content in text browser
+        self.textBrowser_details.clear()
+        # Start building HTML content
+        html_content = []
+        html_content.append("""
+        <style>
+            body {
+                color: #E0E0E0;
+                margin: 0;
+                padding: 0;
+                font-family: system-ui, -apple-system, sans-serif;
+                line-height: 1.6;
+            }
+            .crew-section {
+                margin: 0 0 20px 0;
+            }
+            .crew-item {
+                margin: 0 0 8px 0;
+                display: flex;
+                align-items: baseline;
+            }
+            .crew-role {
+                color: #9E9E9E;
+                font-weight: 500;
+                min-width: 100px;
+                margin-right: 12px;
+            }
+            .crew-names {
+                color: #FFFFFF;
+                flex: 1;
+            }
+            .cast-section {
+                margin: 20px 0 0 0;
+            }
+            .section-heading {
+                color: #CCCCCC;
+                font-size: 18px;
+                font-weight: 600;
+                margin: 0 0 12px 0;
+                padding-bottom: 8px;
+                border-bottom: 1px solid #333333;
+            }
+            .cast-list {
+                color: #FFFFFF;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .cast-member {
+                padding: 4px 10px;
+                border-radius: 4px;
+            }
+            .cast-role {
+                color: #9E9E9E;
+                font-size: 0.9em;
+            }
+        </style>
+        """)
 
         # Handle all metadata
         if movie.metadata:
@@ -563,66 +663,79 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
                 if 'info' in source_data:
                     self._merge_metadata(merged_info, source_data['info'])
 
-            # Display merged metadata
-            container = QWidget()
-            container_layout = QVBoxLayout(container)
-            container_layout.setContentsMargins(10, 0, 10, 20)
-            container_layout.setSpacing(10)
+            # Start crew section
+            html_content.append('<div class="crew-section">')
 
-            def add_metadata_section(data, layout, indent=0):
-                if isinstance(data, dict):
-                    for key, value in data.items():
-                        if key in ['url', 'error'] or value is None:
-                            continue
-                        display_key = key.replace('_', ' ').title()
-                        
-                        # Special formatting for cast
-                        if key == 'cast' and isinstance(value, list):
-                            layout.addWidget(QLabel(f'<h3 style="color: #CCCCCC; font-size: 18px; font-weight: 500; margin-left: {indent}px;">Cast:</h3>'))
-                            for actor in value:
-                                text = actor.get('name', '') + (' as ' + actor.get('role', '') if isinstance(actor, dict) and actor.get('role') else '') if isinstance(actor, dict) else actor
-                                content = QLabel(f'<span style="color: #E0E0E0;">{text}</span>')
-                                content.setWordWrap(True)
-                                content.setStyleSheet(f"margin-left: {indent + 20}px;")
-                                layout.addWidget(content)
-                            continue
-                            
-                        if isinstance(value, (dict, list)):
-                            label = QLabel(f'<h3 style="color: #CCCCCC; font-size: 18px; font-weight: 500; margin-left: {indent}px;">{display_key}:</h3>')
-                            layout.addWidget(label)
-                            add_metadata_section(value, layout, indent + 20)
+            # Display director if available
+            if 'director' in merged_info:
+                director = merged_info['director']
+                director_str = ', '.join(director) if isinstance(director, list) else str(director)
+                html_content.append(
+                    f'<div class="crew-item">'
+                    f'<div class="crew-role">Director</div>'
+                    f'<div class="crew-names">{director_str}</div></div>'
+                )
+
+            # Display producer if available  
+            if 'producer' in merged_info:
+                producer = merged_info['producer']
+                producer_str = ', '.join(producer) if isinstance(producer, list) else str(producer)
+                html_content.append(
+                    f'<div class="crew-item">'
+                    f'<div class="crew-role">Producer</div>'
+                    f'<div class="crew-names">{producer_str}</div></div>'
+                )
+
+            # Display screenwriter if available
+            if 'screenwriter' in merged_info:
+                screenwriter = merged_info['screenwriter']
+                screenwriter_str = ', '.join(screenwriter) if isinstance(screenwriter, list) else str(screenwriter)
+                html_content.append(
+                    f'<div class="crew-item">'
+                    f'<div class="crew-role">Screenwriter</div>'
+                    f'<div class="crew-names">{screenwriter_str}</div></div>'
+                )
+
+            # Display writers if available
+            if 'writers' in merged_info:
+                writers = merged_info['writers']
+                writers_str = ', '.join(writers) if isinstance(writers, list) else str(writers)
+                html_content.append(
+                    f'<div class="crew-item">'
+                    f'<div class="crew-role">Writers</div>'
+                    f'<div class="crew-names">{writers_str}</div></div>'
+                )
+
+            html_content.append('</div>')  # Close crew section
+
+            # Add cast section if available
+            if 'cast' in merged_info and merged_info['cast']:
+                html_content.append('<div class="cast-section">')
+                html_content.append('<div class="section-heading">Cast</div>')
+                html_content.append('<div class="cast-list">')
+                
+                for actor in merged_info['cast']:
+                    if isinstance(actor, dict):
+                        name = actor.get('name', '').replace('<', '&lt;').replace('>', '&gt;')
+                        role = actor.get('role', '').replace('<', '&lt;').replace('>', '&gt;')
+                        if role:
+                            html_content.append(
+                                f'<div class="cast-member">'
+                                f'{name} <span class="cast-role">as {role}</span></div>'
+                            )
                         else:
-                            content = QLabel(f'<span style="color: #E0E0E0; font-weight: 500;">{display_key}:</span> <span style="color: #FFFFFF;">{value}</span>')
-                            content.setWordWrap(True)
-                            content.setStyleSheet(f"margin-left: {indent}px;")
-                            layout.addWidget(content)
-                elif isinstance(data, list):
-                    for item in data:
-                        if isinstance(item, dict):
-                            item_widget = QWidget()
-                            item_layout = QVBoxLayout(item_widget)
-                            item_layout.setContentsMargins(indent, 5, 0, 5)
-                            add_metadata_section(item, item_layout, 0)
-                            layout.addWidget(item_widget)
-                        else:
-                            content = QLabel(f'<span style="color: #FFFFFF;">{item}</span>')
-                            content.setWordWrap(True)
-                            content.setStyleSheet(f"margin-left: {indent}px;")
-                            layout.addWidget(content)
+                            html_content.append(f'<div class="cast-member">{name}</div>')
+                    else:
+                        text = str(actor).replace('<', '&lt;').replace('>', '&gt;')
+                        html_content.append(f'<div class="cast-member">{text}</div>')
+                
+                html_content.append('</div>')  # Close cast-list
+                html_content.append('</div>')  # Close cast-section
 
-            add_metadata_section(merged_info, container_layout)
-            scroll_layout.addWidget(container)
-            scroll_layout.addStretch()
+        # Set the complete HTML content
+        self.textBrowser_details.setHtml('\n'.join(html_content))
 
-        # Set YouTube trailer link if available
-        if hasattr(movie, 'yt_trailer_code') and movie.yt_trailer_code:
-            self.ytLabel.setText("Trailer:")
-            trailer_url = f"https://www.youtube.com/watch?v={movie.yt_trailer_code}"
-            self.ytValue.setText(f'<a href="{trailer_url}" style="color: #2196F3; text-decoration: none; font-weight: 500; padding: 4px 8px; border-radius: 4px; transition: all 0.2s ease;">Watch Trailer</a>')
-            self.ytValue.setOpenExternalLinks(True)
-        else:
-            self.ytLabel.setText("Trailer:")
-            self.ytValue.setText("Not available")
+
 
     def _merge_metadata(self, target, source):
         for key, value in source.items():
