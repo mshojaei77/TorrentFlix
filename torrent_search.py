@@ -820,13 +820,6 @@ class TorrentSearcher:
         tmdb_client = TMDBClient()
         
         try:
-            # Check cache first
-            cache_key = f"leetx_search_{query}_{limit}"
-            cached_results = self.cache.get(cache_key)
-            if cached_results:
-                logger.debug(f"Retrieved results from cache for query: {query}")
-                return [Movie(**movie_data) for movie_data in cached_results]
-
             session = requests.Session()
             session.headers.update({
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -990,10 +983,6 @@ class TorrentSearcher:
                     logger.warning(f"Failed to get TMDB data for {show_name}: {e}")
                     continue
 
-            # Cache the results before returning
-            cache_data = [movie._asdict() for movie in final_results]
-            self.cache.set(cache_key, cache_data)
-            
             return final_results
 
         except requests.exceptions.HTTPError as e:
