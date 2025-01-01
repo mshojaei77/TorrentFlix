@@ -17,7 +17,13 @@ from PyQt5.QtCore import Qt, QFile, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QBrush, QPalette, QColor
 from PyQt5.QtCore import QSize, QSettings
 from app_ui import Ui_MainWindow
-from torrent_search import TorrentSearcher, TorrentSource, Movie,Torrent, MovieMetadata, rotten_scores
+from torrent_search import TorrentSearcher, TorrentSource, Movie,Torrent, MovieMetadata
+from providers.metadata import MetadataSource
+from utils.error_hadlings import MovieSearchError, MovieAPIError, ConnectionBlockedError
+from utils.http_client import make_api_request
+from utils.chaching import Cache
+from providers.metadata.rotten_tomatoes import RottenTomatoesSource, rotten_scores
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
