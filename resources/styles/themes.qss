@@ -1,0 +1,21 @@
+/* Theme variations */
+
+.dark-theme {
+    background-color: #121212;
+    color: #FFFFFF;
+}
+
+.light-theme {
+    background-color: #FFFFFF;
+    color: #000000;
+}
+
+.dark-theme QPushButton {
+    background-color: #2C2C2C;
+    color: #FFFFFF;
+}
+
+.light-theme QPushButton {
+    background-color: #E0E0E0;
+    color: #000000;
+}
