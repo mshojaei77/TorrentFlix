@@ -17,7 +17,7 @@ from PyQt5.QtCore import Qt, QFile, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QBrush, QPalette, QColor
 from PyQt5.QtCore import QSize, QSettings
 from app_ui import Ui_MainWindow
-from torrent_search import TorrentSearcher, TorrentSource, Movie,Torrent, MovieMetadata
+from search_handler import TorrentSearcher, TorrentSource, Movie,Torrent, MovieMetadata
 from providers.metadata import MetadataSource
 from utils.error_hadlings import MovieSearchError, MovieAPIError, ConnectionBlockedError
 from utils.http_client import make_api_request
@@ -262,8 +262,8 @@ class MovieSearchApp(QMainWindow, Ui_MainWindow):
             
             selected_source = TorrentSource.from_display_name(selected_text)
             
-            # Increase the limit to get more results
-            movies = self.torrent_searcher.search_movies(query, selected_source, limit=50)  # Increase from default
+            # Use the search method instead of search_movies
+            movies = self.torrent_searcher.search(query, selected_source, limit=20)
             
             if not movies:
                 self._show_no_results()

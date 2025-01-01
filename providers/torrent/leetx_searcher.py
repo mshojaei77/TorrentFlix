@@ -1,233 +1,39 @@
-from providers.metadata.metacritic import MetacriticSource
-from providers.metadata.rotten_tomatoes import RottenTomatoesSource
-from providers.metadata.tmdb import TMDBClient
+from providers.torrent import BaseTorrentSearcher
 from domin.models import Movie, Torrent, TorrentSource
-from utils.chaching import Cache
-from providers.metadata import MetadataSource
 from utils.error_hadlings import MovieSearchError, MovieAPIError, ConnectionBlockedError
-from utils.http_client import make_api_request
-
-
-import logging
+from datetime import datetime
+from typing import List
 import requests
-from typing import List, Optional, Any
-from datetime import datetime, timedelta
-import re
+import logging
+from providers.metadata.tmdb import TMDBClient
 from bs4 import BeautifulSoup
 from collections import defaultdict
+import re
 import time
-import json
-import os
+from providers.metadata.tmdb import TMDBClient
+from typing import Optional
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-
-class MovieMetadata:
+class LeetxTVSearcher(BaseTorrentSearcher):
     def __init__(self):
-        self.sources = {
-            'metacritic': MetacriticSource(),
-            'rottentomatoes': RottenTomatoesSource(),
-            # Add more sources here as needed
-        }
+        super().__init__()
+        self.current_source = TorrentSource.LEETX
 
-    def get_metadata(self, title: str, year: int, sources: List[str] = None) -> dict:
-        """
-        Get metadata from specified sources for a movie
-        
-        Args:
-            title: Movie title
-            year: Release year
-            sources: List of source names to query (defaults to all)
-            
-        Returns:
-            Dictionary containing metadata from each source
-        """
-        if sources is None:
-            sources = list(self.sources.keys())
-            
-        metadata = {}
-        
-        for source_name in sources:
-            if source_name not in self.sources:
-                logger.warning(f"Unknown metadata source: {source_name}")
-                continue
-                
-            source = self.sources[source_name]
-            try:
-                url = source.get_url(title, year)
-                if url:
-                    info = source.get_info(url)
-                    metadata[source_name] = {
-                        'url': url,
-                        'info': info
-                    }
-            except Exception as e:
-                logger.error(f"Error getting metadata from {source_name}: {e}")
-                metadata[source_name] = {'error': str(e)}
-                
-        return metadata
-
-
-class TorrentSearcher:
-    def __init__(self):
-        self.current_source = TorrentSource.YTS
-        self._session = self._create_session()
-        self.cache = Cache()  # File-based cache
-        self._request_cache = {}  # In-memory session cache for URLs
-        
-    def clear_cache(self):
-        """Clear both in-memory and file caches"""
-        self._request_cache.clear()
-        if os.path.exists(self.cache.cache_dir):
-            for file in os.listdir(self.cache.cache_dir):
-                os.remove(os.path.join(self.cache.cache_dir, file))
-
-    def _create_session(self) -> requests.Session:
-        """Create a configured requests session"""
-        session = requests.Session()
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Connection': 'keep-alive',
-        })
-        return session
-
-    def search_movies(self, query: str, source: TorrentSource, limit: int = 50) -> List[Movie]:
-        """Main search method that delegates to specific source searchers"""
+    def search_tv_series(self, query: str, limit: int = 50) -> List[Movie]:
+        """Search 1337x for TV series using web scraping"""
         try:
             # Clear caches before each new search
             self.clear_cache()
             
-            if source == TorrentSource.YTS:
-                return self._search_yts(query, limit)
-            elif source == TorrentSource.LEETX:
-                return self._search_leetx_tv(query, limit)
-            else:
-                raise ValueError(f"Unsupported torrent source: {source.config['name']}")
+            return self._search_leetx_tv(query, limit)
         except Exception as e:
-            logger.error(f"Search failed for {source.config['name']}: {str(e)}")
+            logger.error(f"Search failed for {self.current_source.config['name']}: {str(e)}")
             raise MovieSearchError(f"Search failed: {str(e)}")
 
-    def _make_request(self, url: str, method: str = 'GET', **kwargs) -> requests.Response:
-        """Make a request with session-level caching"""
-        # Add query parameter to cache key to differentiate between searches
-        cache_key = f"{method}:{url}:{kwargs.get('params', {}).get('query_term', '')}"
-        
-        # Check if cache is still valid (implement cache expiration)
-        if cache_key in self._request_cache:
-            cache_time = self._request_cache.get(f"{cache_key}_timestamp", 0)
-            if time.time() - cache_time > 300:  # 5 minutes cache expiration
-                del self._request_cache[cache_key]
-            else:
-                logger.debug(f"Using cached response for: {url}")
-                return self._request_cache[cache_key]
-            
-        # Make the actual request
-        response = self._session.request(method, url, **kwargs)
-        
-        # Cache successful responses with timestamp
-        if response.status_code == 200:
-            self._request_cache[cache_key] = response
-            self._request_cache[f"{cache_key}_timestamp"] = time.time()
-            
-        return response
-    
-    def _get_image_url(self, url: str) -> str:
-        """Handle image URL redirects with caching"""
-        cache_key = f"image_redirect:{url}"
-        
-        # Check cache first
-        if cache_key in self._request_cache:
-            return self._request_cache[cache_key]
-            
-        try:
-            response = self._session.head(url, allow_redirects=True)
-            final_url = response.url
-            
-            # Cache the final URL after redirect
-            self._request_cache[cache_key] = final_url
-            return final_url
-            
-        except Exception as e:
-            logger.warning(f"Failed to resolve image URL {url}: {e}")
-            return url
-
-    def _search_yts(self, query: str, limit: int) -> List[Movie]:
-        """Search YTS.mx API for movies"""
-        source_config = TorrentSource.YTS.config
-        api_url = source_config["api_url"]
-        
-        # Merge default params with search params
-        params = {
-            **source_config["params"],
-            'query_term': query,
-            'limit': limit,
-        }
-
-        try:
-            logger.debug(f"Searching for {query} on {api_url}")
-            response = self._make_request(api_url, params=params)
-            response.raise_for_status()
-            data = response.json()
-
-            if not data.get('data', {}).get('movies'):
-                return []
-
-            movies = []
-            for movie_data in data['data']['movies']:
-                torrents = [
-                    Torrent(
-                        quality=t['quality'],
-                        type=t.get('type', 'unknown'),
-                        url=t['url'],
-                        size=t['size'],
-                        seeds=t['seeds'],
-                        peers=t['peers'],
-                        date_uploaded=datetime.fromisoformat(t['date_uploaded']).strftime('%Y-%m-%d'),
-                        video_codec=t.get('video_codec', 'unknown')
-                    )
-                    for t in movie_data['torrents']
-                ]
-
-                movie = Movie(
-                    title=movie_data['title'],
-                    torrents=torrents,
-                    poster_url=movie_data.get('large_cover_image'),
-                    rating=movie_data.get('rating', 0.0),
-                    genres=movie_data.get('genres', []),
-                    description_full=movie_data.get('description_full', 'No description available'),
-                    year=movie_data.get('year', 0),
-                    language=movie_data.get('language', 'N/A'),
-                    runtime=movie_data.get('runtime', 0),
-                    imdb_code=movie_data.get('imdb_code', ''),
-                    cast=movie_data.get('cast', []),
-                    download_count=movie_data.get('download_count', 0),
-                    yt_trailer_code=movie_data.get('yt_trailer_code', ''),
-                    background_image_original=movie_data.get('background_image_original', '')
-                )
-                movies.append(movie)
-
-            # Handle image URLs
-            for movie_data in data['data']['movies']:
-                if 'large_cover_image' in movie_data:
-                    movie_data['large_cover_image'] = self._get_image_url(movie_data['large_cover_image'])
-                if 'background_image_original' in movie_data:
-                    movie_data['background_image_original'] = self._get_image_url(movie_data['background_image_original'])
-
-            return movies
-
-        except requests.exceptions.HTTPError as e:
-            raise MovieAPIError(f"Failed to fetch movies: {str(e)}")
-        except (requests.exceptions.ConnectionError, ConnectionResetError) as e:
-            raise ConnectionBlockedError("Connection blocked. Please ensure your VPN is enabled and try again.")
-        except Exception as e:
-            raise MovieSearchError(f"Failed to process movie data: {str(e)}")
-        
     def _search_leetx_tv(self, query: str, limit: int) -> List[Movie]:
-        """Search 1337x for TV series using web scraping with comprehensive season/episode coverage"""
-        source_config = TorrentSource.LEETX.config
+        """Internal method to search 1337x for TV series"""
+        source_config = self.current_source.config
         base_url = source_config["base_url"]
         search_url = f"{base_url}/search/{query.replace(' ', '+')}/{{page}}/"
         tmdb_client = TMDBClient()
@@ -311,7 +117,7 @@ class TorrentSearcher:
                         continue
 
                 # Check if there's a next page (fix pagination check)
-                next_page = soup.select_one('div.pagination a:contains("Next")')
+                next_page = soup.select_one('div.pagination a', text=re.compile(r'Next', re.IGNORECASE))
                 if not next_page:
                     logger.debug(f"No more pages found after page {page}")
                     break
@@ -400,7 +206,7 @@ class TorrentSearcher:
         except Exception as e:
             raise MovieSearchError(f"Failed to process TV series data: {str(e)}")
 
-    def _parse_show_title(self, raw_title: str) -> dict:
+    def _parse_show_title(self, raw_title: str) -> Optional[dict]:
         """Parse show title into components with improved TV show handling"""
         # Common patterns
         quality_patterns = {
@@ -485,33 +291,4 @@ class TorrentSearcher:
             
         except Exception as e:
             logger.error(f"Error parsing title '{raw_title}': {str(e)}")
-            return None
-
-    def _get_torrent_details(self, url: str) -> dict:
-        """Get details from torrent page with caching"""
-        try:
-            # Check cache first
-            cache_key = f"torrent_details_{url}"
-            cached_data = self.cache.get(cache_key)
-            if cached_data:
-                return cached_data
-
-            # Fetch and parse the page
-            detail_response = self._session.get(url)
-            detail_soup = BeautifulSoup(detail_response.text, 'html.parser')
-            
-            # Extract details
-            details = {
-                'magnet': detail_soup.select_one('a[href^="magnet:"]')['href'],
-                # Add any other details you want to extract
-            }
-            
-            # Cache the results
-            self.cache.set(cache_key, details)
-            
-            return details
-            
-        except Exception as e:
-            logger.warning(f"Failed to get torrent details for {url}: {e}")
-            return {}
-
+            return None 
