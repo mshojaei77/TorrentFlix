@@ -46,34 +46,72 @@ class MovieSelectionDialog(QDialog):
     def __init__(self, movies: List[Movie], parent=None):
         super().__init__(parent)
         self.setWindowTitle("Select Movie")
-        self.setFixedSize(600, 600)  # Use setFixedSize for better control
+        self.setFixedSize(600, 600)
         
-        layout = QVBoxLayout(self)  # Set layout directly to the dialog
+        # Create main layout
+        layout = QVBoxLayout(self)
+        
+        # Create movie list widget
         self.movie_list = QListWidget()
         self.movie_list.setSelectionMode(QAbstractItemView.SingleSelection)
-        
-        # Add this line to remove the focus rectangle
         self.movie_list.setFocusPolicy(Qt.NoFocus)
         
-        # Populate the movie list with items
+        # Clear any existing items and selection
+        self.movie_list.clear()
+        self.movie_list.clearSelection()
+        
+        # Reset the current item
+        self.movie_list.setCurrentItem(None)
+        
+        # Populate with fresh data
         for movie in movies:
             item = QListWidgetItem(f"{movie.title} ({movie.year})")
             item.setData(Qt.UserRole, movie)
-            # Remove dots by disabling text elision
             item.setTextAlignment(Qt.AlignLeft)
             self.movie_list.addItem(item)
-            
-        # Disable text elision at the widget level
-        self.movie_list.setTextElideMode(Qt.ElideNone)
         
+        # Configure list widget appearance
+        self.movie_list.setTextElideMode(Qt.ElideNone)
+        self.movie_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.movie_list.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # Add to layout
         layout.addWidget(self.movie_list)
         
-        # Connect double click to accept
+        # Connect signals
         self.movie_list.itemDoubleClicked.connect(self.accept)
+        self.movie_list.itemClicked.connect(self._handle_selection)
+        
+        # Initialize selection
+        if self.movie_list.count() > 0:
+            self.movie_list.setCurrentRow(0)
+            self._handle_selection(self.movie_list.item(0))
+
+    def _handle_selection(self, item):
+        """Handle single click selection"""
+        if item:
+            self.movie_list.setCurrentItem(item)
 
     def get_selected_movie(self) -> Movie:
+        """Get the currently selected movie"""
         current_item = self.movie_list.currentItem()
-        return current_item.data(Qt.UserRole) if current_item else None
+        if current_item:
+            return current_item.data(Qt.UserRole)
+        return None
+
+    def showEvent(self, event):
+        """Handle dialog show event"""
+        super().showEvent(event)
+        # Ensure first item is visible
+        if self.movie_list.count() > 0:
+            self.movie_list.scrollToItem(self.movie_list.item(0))
+
+    def closeEvent(self, event):
+        """Handle dialog close event"""
+        # Clear selection and items before closing
+        self.movie_list.clearSelection()
+        self.movie_list.clear()
+        super().closeEvent(event)
 class MovieSearchApp(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()

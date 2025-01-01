@@ -1,29 +1,40 @@
-from bs4 import BeautifulSoup
 import requests
 
-def scrape_scores(url):
-    # Send HTTP request and get the HTML content
-    response = requests.get(url)
-    html_content = response.text
+def get_movie_description(title: str) -> str:
+    """
+    Get movie description from YTS API.
     
-    # Create BeautifulSoup object to parse HTML
-    soup = BeautifulSoup(html_content, 'html.parser')
-    
-    # Find critics score (Tomatometer)
-    critics_score = soup.find('rt-text', {'slot': 'criticsScore'})
-    critics_score = critics_score.text.strip() if critics_score else 'N/A'
-    
-    # Find audience score (Popcornmeter) 
-    audience_score = soup.find('rt-text', {'slot': 'audienceScore'})
-    audience_score = audience_score.text.strip() if audience_score else 'N/A'
-    
-    return {
-        'critics_score': critics_score,
-        'audience_score': audience_score
+    Args:
+        title: Movie title to search for
+        
+    Returns:
+        str: Movie description or error message
+    """
+    api_url = "https://yts.mx/api/v2/list_movies.json"
+    params = {
+        'query_term': title,
+        'limit': 1  # We only need the first result
     }
 
-# Example usage
-url = "https://www.rottentomatoes.com/m/silo"
-scores = scrape_scores(url)
-print(f"Critics Score: {scores['critics_score']}")
-print(f"Audience Score: {scores['audience_score']}")
+    try:
+        # Make API request
+        response = requests.get(api_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        # Check if movies were found
+        if not data.get('data', {}).get('movies'):
+            return f"No movie found with title: {title}"
+
+        # Get description from first movie result
+        movie = data['data']['movies'][0]
+        return movie.get('description_full', 'No description available')
+
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching movie data: {str(e)}"
+    except (KeyError, IndexError) as e:
+        return f"Error parsing movie data: {str(e)}"
+
+# Example usage:
+description = get_movie_description("Inception")
+print(description)

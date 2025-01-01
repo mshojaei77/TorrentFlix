@@ -1,0 +1,111 @@
+/* Main Window */
+QMainWindow {
+    background-color: #121212;
+    border-radius: 8px;
+}
+
+/* Title Label */
+QLabel {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: bold;
+    padding: 24px;
+    qproperty-alignment: AlignCenter;
+    border-radius: 8px;
+    border-radius: 12px;
+    padding: 0px;
+    font-size: 14px;
+    padding: 5px;
+    background-color: transparent;
+}
+
+/* Combo Box */
+QComboBox {
+    background-color: #2a2a2a;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    margin: 12px 24px;
+    font-size: 16px;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 36px;
+    color: #ffffff;
+    border-radius: 8px;
+}
+
+QComboBox::down-arrow {
+    image: url(down_arrow.png);
+    width: 14px;
+    height: 14px;
+    color: #ffffff;
+    border-radius: 4px;
+}
+
+QComboBox:hover {
+    background-color: #333333;
+    color: #3498db;
+    border-radius: 8px;
+}
+
+/* Scroll Area */
+QScrollArea {
+    background-color: #121212;
+    border: none;
+    border-radius: 8px;
+}
+
+QScrollArea QWidget {
+    background-color: #121212;
+    border-radius: 8px;
+}
+
+QScrollArea QScrollBar:vertical {
+    background-color: #121212;
+    width: 8px;
+    margin: 0px;
+    border-radius: 4px;
+}
+
+QScrollArea QScrollBar::handle:vertical {
+    background-color: #404040;
+    border-radius: 4px;
+    min-height: 30px;
+}
+
+QScrollArea QScrollBar::add-line:vertical,
+QScrollArea QScrollBar::sub-line:vertical {
+    height: 0px;
+    border-radius: 4px;
+}
+
+/* Movie Widgets */
+QWidget#movieWidget {
+    background-color: transparent;
+    border-radius: 10px;
+    margin: 5px;
+    background-color: #1e1e1e;
+}
+
+QWidget#movieWidget:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+QLabel#movieTitle {
+    color: #ffffff;
+    font-size: 14px;
+    padding: 5px;
+    background-color: transparent;
+}
+
+QLabel#posterLabel {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+    border-radius: 10px;
+}

@@ -621,7 +621,7 @@ class Cache:
     """File-based cache system with daily expiration"""
     def __init__(self, cache_dir: str = ".cache"):
         self.cache_dir = cache_dir
-        self.cache_duration = timedelta(days=1)
+        self.cache_duration = timedelta(minutes=5)  # Reduced cache duration to 5 minutes
         self._ensure_cache_dir()
     
     def _ensure_cache_dir(self):
@@ -672,6 +672,15 @@ class Cache:
         except Exception as e:
             logger.warning(f"Cache write error for {key}: {e}")
 
+    def clear(self):
+        """Clear all cached files"""
+        if os.path.exists(self.cache_dir):
+            for file in os.listdir(self.cache_dir):
+                try:
+                    os.remove(os.path.join(self.cache_dir, file))
+                except OSError as e:
+                    logger.warning(f"Failed to remove cache file {file}: {e}")
+
 class TorrentSearcher:
     def __init__(self):
         self.current_source = TorrentSource.YTS
@@ -679,6 +688,13 @@ class TorrentSearcher:
         self.cache = Cache()  # File-based cache
         self._request_cache = {}  # In-memory session cache for URLs
         
+    def clear_cache(self):
+        """Clear both in-memory and file caches"""
+        self._request_cache.clear()
+        if os.path.exists(self.cache.cache_dir):
+            for file in os.listdir(self.cache.cache_dir):
+                os.remove(os.path.join(self.cache.cache_dir, file))
+
     def _create_session(self) -> requests.Session:
         """Create a configured requests session"""
         session = requests.Session()
@@ -693,6 +709,9 @@ class TorrentSearcher:
     def search_movies(self, query: str, source: TorrentSource, limit: int = 50) -> List[Movie]:
         """Main search method that delegates to specific source searchers"""
         try:
+            # Clear caches before each new search
+            self.clear_cache()
+            
             if source == TorrentSource.YTS:
                 return self._search_yts(query, limit)
             elif source == TorrentSource.LEETX:
@@ -705,19 +724,25 @@ class TorrentSearcher:
 
     def _make_request(self, url: str, method: str = 'GET', **kwargs) -> requests.Response:
         """Make a request with session-level caching"""
-        cache_key = f"{method}:{url}"
+        # Add query parameter to cache key to differentiate between searches
+        cache_key = f"{method}:{url}:{kwargs.get('params', {}).get('query_term', '')}"
         
-        # Check in-memory cache first
+        # Check if cache is still valid (implement cache expiration)
         if cache_key in self._request_cache:
-            logger.debug(f"Using cached response for: {url}")
-            return self._request_cache[cache_key]
+            cache_time = self._request_cache.get(f"{cache_key}_timestamp", 0)
+            if time.time() - cache_time > 300:  # 5 minutes cache expiration
+                del self._request_cache[cache_key]
+            else:
+                logger.debug(f"Using cached response for: {url}")
+                return self._request_cache[cache_key]
             
         # Make the actual request
         response = self._session.request(method, url, **kwargs)
         
-        # Cache successful responses
+        # Cache successful responses with timestamp
         if response.status_code == 200:
             self._request_cache[cache_key] = response
+            self._request_cache[f"{cache_key}_timestamp"] = time.time()
             
         return response
     
@@ -820,14 +845,9 @@ class TorrentSearcher:
         tmdb_client = TMDBClient()
         
         try:
-            session = requests.Session()
-            session.headers.update({
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Connection': 'keep-alive',
-            })
-
+            # Create a new session for each search
+            session = self._create_session()
+            
             # Group episodes by show name, season, and episode
             shows = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
             
